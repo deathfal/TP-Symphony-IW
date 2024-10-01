@@ -20,6 +20,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 	gettext \
 	git \
 	libssl-dev \
+	curl \
+	zip \
+	unzip \
 	&& rm -rf /var/lib/apt/lists/*
 
 # Install PHP extensions including OpenSSL
@@ -30,8 +33,7 @@ RUN set -eux; \
 		intl \
 		opcache \
 		openssl \
-		zip \
-	;
+		zip
 
 # Ensure the OpenSSL extension is enabled
 RUN echo "extension=openssl.so" > "$PHP_INI_DIR/conf.d/openssl.ini"
@@ -58,13 +60,13 @@ FROM frankenphp_base AS frankenphp_dev
 
 ENV APP_ENV=dev XDEBUG_MODE=off
 
+# Use development php.ini
 RUN mv "$PHP_INI_DIR/php.ini-development" "$PHP_INI_DIR/php.ini"
 
 # Install xdebug for development
 RUN set -eux; \
 	install-php-extensions \
-		xdebug \
-	;
+		xdebug
 
 COPY --link frankenphp/conf.d/20-app.dev.ini $PHP_INI_DIR/app.conf.d/
 
@@ -76,23 +78,32 @@ FROM frankenphp_base AS frankenphp_prod
 ENV APP_ENV=prod
 ENV FRANKENPHP_CONFIG="import worker.Caddyfile"
 
+# Use production php.ini
 RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 
 COPY --link frankenphp/conf.d/20-app.prod.ini $PHP_INI_DIR/app.conf.d/
 COPY --link frankenphp/worker.Caddyfile /etc/caddy/worker.Caddyfile
 
-# Prevent the reinstallation of vendors at every change in the source code
+# Copy composer files and install vendors
 COPY --link composer.* symfony.* ./
+
 RUN set -eux; \
 	composer install --no-cache --prefer-dist --no-dev --no-autoloader --no-scripts --no-progress
 
-# Copy sources
+# Copy application source code
 COPY --link . ./
+
+# Clean up unnecessary files
 RUN rm -Rf frankenphp/
 
+# Ensure cache and log directories exist
 RUN set -eux; \
 	mkdir -p var/cache var/log; \
+	chmod +x bin/console; \
+	sync;
+
+# Optimize autoloader and prepare for production
+RUN set -eux; \
 	composer dump-autoload --classmap-authoritative --no-dev; \
 	composer dump-env prod; \
-	composer run-script --no-dev post-install-cmd; \
-	chmod +x bin/console; sync;
+	composer run-script --no-dev post-install-cmd;

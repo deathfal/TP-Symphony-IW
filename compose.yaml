@@ -25,13 +25,27 @@ services:
         protocol: tcp
       # HTTPS
       - target: 443
-        published: ${HTTPS_PORT:-443}
+        published: ${HTTPS_PORT:-444}
         protocol: tcp
       # HTTP/3
       - target: 443
         published: ${HTTP3_PORT:-443}
         protocol: udp
+    networks:
+      - backend
 
+  mysql:
+    image: mysql:8
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-!ChangeMe!}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-app}
+      MYSQL_USER: ${MYSQL_USER:-app}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-!ChangeMe!}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - backend
 # Mercure is installed as a Caddy module, prevent the Flex recipe from installing another service
 ###> symfony/mercure-bundle ###
 ###< symfony/mercure-bundle ###
@@ -39,5 +53,10 @@ services:
 volumes:
   caddy_data:
   caddy_config:
+  mysql_data:
 ###> symfony/mercure-bundle ###
 ###< symfony/mercure-bundle ###
+
+networks:
+  backend:
+    driver: bridge
